@@ -1,3 +1,7 @@
+## 0.1.0+1
+
+- Fixed package version in README installation example.
+
 ## 0.1.0
 
 - Renamed package to `thl_ussd_service` under `com.thltechnologies.ussd_service` namespace.
