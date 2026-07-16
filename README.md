@@ -14,7 +14,7 @@ Add `thl_ussd_service` as a dependency in your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  thl_ussd_service: ^1.0.0
+  thl_ussd_service: ^0.1.0
 ```
 
 ### Android Manifest Permissions
@@ -67,5 +67,5 @@ However, many mobile carriers allow you to perform multi-step operations by appe
 ```text
 *firstCode*secondOption*thirdOption#
 ```
-For example: `*123*1*2#` instead of dialing `*123#`, waiting for a menu, entering `1`, and then entering `2`.
+For example: `#123*1*2#` instead of dialing `#123#`, waiting for a menu, entering `1`, and then entering `2`.
 
