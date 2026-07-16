@@ -1,4 +1,4 @@
-## 1.0.0
+## 0.1.0
 
 - Renamed package to `thl_ussd_service` under `com.thltechnologies.ussd_service` namespace.
 - Upgraded package compatibility to Dart 3 and recent Flutter versions.

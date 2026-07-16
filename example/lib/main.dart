@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:thl_ussd_service/ussd_service.dart';
+import 'package:thl_ussd_service/thl_ussd_service.dart';
 
 void main() => runApp(const MyApp());
 

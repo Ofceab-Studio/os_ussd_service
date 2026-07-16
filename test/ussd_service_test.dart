@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:thl_ussd_service/ussd_service.dart';
+import 'package:thl_ussd_service/thl_ussd_service.dart';
 
 void main() {
   const MethodChannel channel =

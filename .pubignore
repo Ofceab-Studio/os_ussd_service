@@ -1,0 +1,14 @@
+# Pub publication ignore file
+# Exclude build files
+build/
+.dart_tool/
+.gradle/
+
+# Exclude IDE files
+.idea/
+*.iml
+.vscode/
+
+# Exclude local properties
+android/local.properties
+example/android/local.properties

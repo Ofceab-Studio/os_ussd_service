@@ -37,7 +37,7 @@ Before making a USSD request with this plugin, you must:
 
 ```dart
 import 'package:flutter/services.dart';
-import 'package:thl_ussd_service/ussd_service.dart';
+import 'package:thl_ussd_service/thl_ussd_service.dart';
 
 Future<void> makeMyRequest() async {
   int subscriptionId = 1; // Retrieve this using a SIM card data plugin
