@@ -1,6 +1,13 @@
-## 0.1.0+1
+## 0.2.0
 
-- Fixed package version in README installation example.
+- Integrated `ussd_launcher` features into `thl_ussd_service` under a unified API surface.
+- Added Dialer-based Interactive USSD requests (`sendUssdRequest`) using Android's Accessibility Service to handle codes with special syntax (like `#101#451#`).
+- Added Multi-step USSD menu automation (`multisessionUssd`) to navigate interactive menus automatically.
+- Added Overlay Service (`UssdOverlayService`) to display a fullscreen loading calque and hide system dialogs.
+- Added helper APIs to query active SIM cards (`getSimCards`), check/open accessibility settings, and check/open overlay settings.
+- Re-implemented the native library unifications in Kotlin.
+
+## 0.1.0+1
 
 ## 0.1.0
 

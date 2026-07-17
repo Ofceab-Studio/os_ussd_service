@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_service_description">This service is required by THL USSD Service to read USSD messages and automate menu responses.</string>
+</resources>
