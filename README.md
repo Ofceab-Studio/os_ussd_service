@@ -1,8 +1,10 @@
 # thl_ussd_service
 
-A Flutter plugin to make silent USSD requests and read their responses, using Android's native [sendUssdRequest](https://developer.android.com/reference/android/telephony/TelephonyManager.html#sendUssdRequest(java.lang.String,%20android.telephony.TelephonyManager.UssdResponseCallback,%20android.os.Handler)) method. 
+A Flutter plugin to make USSD requests and manage multi-step USSD sessions on Android. 
 
-This is an updated and modernized fork of the original `ussd_service` package, fully compatible with **Dart 3**, recent **Flutter** versions, and **Android Gradle Plugin (AGP) 8.0+ / 9.0+**.
+This plugin offers two distinct execution modes:
+1. **Silent Mode (TelephonyManager):** Performs silent requests in the background. Invisible to the user, requires no special settings, but is subject to strict Android OS syntax limitations (only standard codes like `*100#`).
+2. **Interactive/Accessibility Mode (AccessibilityService):** Simulates dialer actions to process any custom formatting (like `#101#451#`) and automates multi-step interactive menus (e.g. choosing menu options sequentially). Requires the user to enable Accessibility settings.
 
 *Note: iOS is not supported.*
 
@@ -14,58 +16,133 @@ Add `thl_ussd_service` as a dependency in your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  thl_ussd_service: ^0.1.0
+  thl_ussd_service: ^0.2.0
 ```
 
-### Android Manifest Permissions
-Ensure that your `AndroidManifest.xml` (located in `android/app/src/main/AndroidManifest.xml`) includes the `CALL_PHONE` permission:
+### Android Manifest & Permissions
+Ensure that your `AndroidManifest.xml` includes the `CALL_PHONE` permission:
 
 ```xml
 <uses-permission android:name="android.permission.CALL_PHONE" />
 ```
 
+*Note: The plugin automatically merges the other necessary permissions (`READ_PHONE_STATE`, `SYSTEM_ALERT_WINDOW`, `BIND_ACCESSIBILITY_SERVICE`, `FOREGROUND_SERVICE`) into your final merged manifest.*
+
 ---
 
 ## Usage
 
-Before making a USSD request with this plugin, you must:
+### Mode 1: Silent Requests (Background, no Accessibility required)
 
-1. **Request Permissions:** Make sure the user has granted access to phone calls, for example using the [permission_handler](https://pub.dev/packages/permission_handler) package.
-2. **Retrieve Subscription ID:** Retrieve the [SIM card subscription ID](https://developer.android.com/reference/android/telephony/SubscriptionInfo#getSubscriptionId()), for example using the [sim_data_plus](https://pub.dev/packages/sim_data_plus) or [flutter_sim_data](https://pub.dev/packages/flutter_sim_data) packages.
-
-### Example Code
+Best for standard USSD codes where you only need a single silent response. Android 8.0+ is required.
 
 ```dart
 import 'package:flutter/services.dart';
 import 'package:thl_ussd_service/thl_ussd_service.dart';
 
-Future<void> makeMyRequest() async {
-  int subscriptionId = 1; // Retrieve this using a SIM card data plugin
-  String code = "*#21#";   // Your USSD code
+Future<void> makeSilentRequest() async {
+  int subscriptionId = 1; // Retrieve this using a SIM card data plugin or UssdService.getSimCards()
+  String code = "*100#";
   
   try {
-    String ussdResponseMessage = await UssdService.makeRequest(
+    String responseMessage = await UssdService.makeRequest(
       subscriptionId,
       code,
-      const Duration(seconds: 10), // Optional timeout - default is 10 seconds
+      const Duration(seconds: 10), // Optional timeout
     );
-    print("Success! Response message: $ussdResponseMessage");
+    print("Success! Response message: $responseMessage");
   } on PlatformException catch (e) {
-    print("Execution failed! Code: ${e.code} - Message: ${e.message}");
+    print("Failed! Code: ${e.code} - Message: ${e.message}");
   }
 }
 ```
 
 ---
 
-## Interactive / Multi-step USSD Sessions
+### Mode 2: Interactive Requests (Dialer-based, requires Accessibility)
 
-Android's native `sendUssdRequest` API **does not support interactive or multi-step USSD sessions** (where you input options in menus). Consequently, this plugin does not support them either.
+Best for non-standard USSD codes (like `#101#451#`) that Android's native silent API rejects.
 
-However, many mobile carriers allow you to perform multi-step operations by appending options directly within a single request using the format:
+Before calling this, you must check and prompt the user to enable the Accessibility Service for your app.
 
-```text
-*firstCode*secondOption*thirdOption#
+```dart
+import 'package:flutter/services.dart';
+import 'package:thl_ussd_service/thl_ussd_service.dart';
+
+Future<void> makeInteractiveRequest() async {
+  // 1. Verify accessibility permission
+  if (!await UssdService.isAccessibilityEnabled()) {
+    await UssdService.openAccessibilitySettings();
+    print("Please enable the Accessibility service for our app.");
+    return;
+  }
+
+  // 2. Execute
+  int subscriptionId = 1;
+  String code = "#101#451#";
+  
+  try {
+    String? result = await UssdService.sendUssdRequest(
+      ussdCode: code,
+      subscriptionId: subscriptionId,
+    );
+    print("Request finished. Result: $result");
+  } on PlatformException catch (e) {
+    print("Error: ${e.message}");
+  }
+}
 ```
-For example: `#123*1*2#` instead of dialing `#123#`, waiting for a menu, entering `1`, and then entering `2`.
+
+---
+
+### Mode 3: Multi-step Automation (requires Accessibility & Overlay permissions)
+
+Automatically walks through multi-step interactive menus by sending option responses sequentially.
+
+```dart
+import 'package:thl_ussd_service/thl_ussd_service.dart';
+
+void runMultiStepSession() async {
+  // 1. Verify Accessibility
+  if (!await UssdService.isAccessibilityEnabled()) {
+    await UssdService.openAccessibilitySettings();
+    return;
+  }
+
+  // 2. Verify Overlay Draw Permission (optional, to hide system gray dialogs)
+  if (!await UssdService.isOverlayPermissionGranted()) {
+    await UssdService.openOverlaySettings();
+    return;
+  }
+
+  // 3. Register real-time message listener
+  UssdService.setUssdMessageListener((message) {
+    print("Step response: $message");
+  });
+
+  // 4. Run session
+  try {
+    await UssdService.multisessionUssd(
+      code: '#101#',
+      slotIndex: 0, // SIM slot index (0 or 1)
+      options: ["1", "2", "3"], // Option inputs for menus sequentially
+      overlayMessage: "Processing automatic options. Please wait...",
+    );
+    print("Session completed successfully.");
+  } finally {
+    // 5. Always clean up listener when done
+    UssdService.removeUssdMessageListener();
+  }
+}
+```
+
+---
+
+## Utility APIs
+
+- `UssdService.getSimCards()`: Retrieves a list of active SIM card details (slotIndex, subscriptionId, displayName, carrierName).
+- `UssdService.isAccessibilityEnabled()` / `UssdService.openAccessibilitySettings()`: Checks or prompts to enable accessibility.
+- `UssdService.isOverlayPermissionGranted()` / `UssdService.openOverlaySettings()`: Checks or prompts to enable drawing over other apps.
+- `UssdService.cancelSession()`: Cancels an active interactive session.
+
 
