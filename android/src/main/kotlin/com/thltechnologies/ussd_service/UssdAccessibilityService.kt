@@ -504,7 +504,42 @@ class UssdAccessibilityService : AccessibilityService() {
             if (isValidUssdMessage(dialogContent) && dialogContent != lastUssdMessage) {
                 lastUssdMessage = dialogContent
                 UssdServicePlugin.onUssdResult(dialogContent)
+
+                // If there are no pending options to send, this is either a single session response 
+                // or the final step of a multi-session navigation. Dismiss the native dialog box automatically.
+                val inputNode = findInputField(root)
+                val hasInputField = inputNode != null
+                inputNode?.recycle()
+
+                if (pendingMessages.isEmpty() && !hasInputField) {
+                    handler.postDelayed({
+                        dismissActiveDialog()
+                    }, 250)
+                }
             }
+        }
+    }
+
+    private fun dismissActiveDialog() {
+        try {
+            val root = this.rootInActiveWindow ?: return
+            val button1 = root.findAccessibilityNodeInfosByViewId("android:id/button1")
+            var clicked = button1?.firstOrNull()?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+            button1?.forEach { it.recycle() }
+            
+            if (!clicked) {
+                val button2 = root.findAccessibilityNodeInfosByViewId("android:id/button2")
+                clicked = button2?.firstOrNull()?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+                button2?.forEach { it.recycle() }
+            }
+            
+            if (!clicked) {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            }
+            root.recycle()
+            println("UssdAccessibilityService: Dialogue dismissed automatically")
+        } catch (e: Exception) {
+            println("UssdAccessibilityService: Error dismissing dialogue: ${e.message}")
         }
     }
     
