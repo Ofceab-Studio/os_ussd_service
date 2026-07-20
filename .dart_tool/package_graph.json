@@ -1,11 +1,11 @@
 {
   "roots": [
-    "ussd_service"
+    "thl_ussd_service"
   ],
   "packages": [
     {
-      "name": "ussd_service",
-      "version": "0.2.0",
+      "name": "thl_ussd_service",
+      "version": "0.2.1",
       "dependencies": [
         "flutter"
       ],

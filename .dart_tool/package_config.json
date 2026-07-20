@@ -158,7 +158,7 @@
       "languageVersion": "3.5"
     },
     {
-      "name": "ussd_service",
+      "name": "thl_ussd_service",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.0"
