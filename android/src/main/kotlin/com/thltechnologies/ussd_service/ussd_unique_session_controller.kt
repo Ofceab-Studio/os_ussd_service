@@ -19,11 +19,29 @@ class UssdSessionUnique(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    private fun getSlotIndexFromSubscriptionId(subscriptionId: Int): Int {
+        if (subscriptionId == -1) return 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val info = subscriptionManager.getActiveSubscriptionInfo(subscriptionId)
+                if (info != null) {
+                    return info.simSlotIndex
+                }
+            } catch (e: SecurityException) {
+                // Ignore
+            }
+        }
+        return 0
+    }
+
     fun sendUssdRequest(ussdCode: String, subscriptionId: Int, result: MethodChannel.Result) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val isNonStandard = ussdCode.startsWith("#") || ussdCode.indexOf('#') != ussdCode.lastIndexOf('#')
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isNonStandard) {
             sendUssdRequestModern(ussdCode, subscriptionId, result)
         } else {
-            sendUssdRequestLegacy(ussdCode, result)
+            val slotIndex = getSlotIndexFromSubscriptionId(subscriptionId)
+            sendUssdRequestLegacy(ussdCode, slotIndex, result)
         }
     }
 
@@ -66,17 +84,69 @@ class UssdSessionUnique(private val context: Context) {
         }
     }
 
-    private fun sendUssdRequestLegacy(ussdCode: String, result: MethodChannel.Result) {
+    private fun sendUssdRequestLegacy(ussdCode: String, simSlot: Int, result: MethodChannel.Result) {
         try {
             val encodedHash = Uri.encode("#")
             val formattedCode = ussdCode.replace("#", encodedHash)
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$formattedCode"))
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            val uri = Uri.parse("tel:$formattedCode")
+            val intent = Intent(Intent.ACTION_CALL, uri).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra("com.android.phone.force.slot", true)
+                putExtra("Cdma_Supp", true)
+            }
+            
+            val slotKeys = arrayOf(
+                "extra_asus_dial_use_dualsim",
+                "com.android.phone.extra.slot",
+                "slot", "simslot", "sim_slot",
+                "Subscription", "phone",
+                "com.android.phone.DialingMode",
+                "simSlot", "slot_id", "simId",
+                "simnum", "phone_type", "slotId", "slotIdx"
+            )
+            for (key in slotKeys) {
+                intent.putExtra(key, simSlot)
+            }
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager?
+                telecomManager?.let {
+                    val phoneAccounts = it.callCapablePhoneAccounts
+                    if (phoneAccounts.size > simSlot && simSlot >= 0) {
+                        intent.putExtra("android.telecom.extra.PHONE_ACCOUNT_HANDLE", phoneAccounts[simSlot])
+                    }
+                }
+            }
+            
+            // Signal the accessibility service to close overlay + dismiss dialog after capturing response
+            UssdAccessibilityService.singleSessionMode = true
+
+            // Start overlay to mask the native USSD dialog from the user
+            if (UssdOverlayService.canDrawOverlay(context)) {
+                try {
+                    val overlayIntent = Intent(context, UssdOverlayService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(overlayIntent)
+                    } else {
+                        context.startService(overlayIntent)
+                    }
+                    UssdOverlayService.updateMessage("Envoi en cours")
+                } catch (e: Exception) {
+                    println("UssdSessionUnique: Error starting overlay: ${e.message}")
+                }
+            }
+
             context.startActivity(intent)
             result.success("USSD_INITIATED_LEGACY")
         } catch (e: SecurityException) {
+            // Stop overlay and reset state on error
+            UssdAccessibilityService.singleSessionMode = false
+            try { context.stopService(android.content.Intent(context, UssdOverlayService::class.java)) } catch (_: Exception) {}
             result.error("PERMISSION_DENIED", "CALL_PHONE permission required: ${e.message}", null)
         } catch (e: Exception) {
+            // Stop overlay and reset state on error
+            UssdAccessibilityService.singleSessionMode = false
+            try { context.stopService(android.content.Intent(context, UssdOverlayService::class.java)) } catch (_: Exception) {}
             result.error("LEGACY_USSD_ERROR", "Failed to initiate USSD: ${e.message}", null)
         }
     }

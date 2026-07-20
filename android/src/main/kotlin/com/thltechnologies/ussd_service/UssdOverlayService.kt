@@ -29,7 +29,7 @@ class UssdOverlayService : Service() {
 
     companion object {
         private var instance: UssdOverlayService? = null
-        private var overlayMessage = "Opération USSD en cours..."
+        private var overlayMessage = "Envoi en cours"
         
         fun isRunning(): Boolean = instance != null
         
@@ -83,7 +83,7 @@ class UssdOverlayService : Service() {
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("USSD Service")
-            .setContentText("Opération USSD en cours...")
+            .setContentText("Envoi en cours")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
 
@@ -91,70 +91,147 @@ class UssdOverlayService : Service() {
     }
 
     private fun createOverlayView() {
-        val layout = LinearLayout(this).apply {
+        val dm = resources.displayMetrics
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
+
+        // ── Root: plain white background (same as login Scaffold) ─────
+        val rootLayout = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(Color.WHITE)
+        }
+
+        // ── TOP HALF: large orange circle (same as login decoration) ──
+        // The circle is 1.4× screen width, offset upward by 45% of its size
+        val circleSize = (screenW * 1.4).toInt()
+        val circleTop = -(circleSize * 0.45).toInt()
+        val circleLeft = -(screenW * 0.2).toInt()
+
+        val orangeCircle = android.view.View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                // Radial gradient: #FFAA2A → #FF9000 (same as login)
+                colors = intArrayOf(
+                    Color.parseColor("#FFAA2A"),
+                    Color.parseColor("#FF9000")
+                )
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = circleSize * 0.65f
+            }
+        }
+        val circleParams = android.widget.FrameLayout.LayoutParams(circleSize, circleSize).apply {
+            topMargin = circleTop
+            leftMargin = circleLeft
+        }
+        rootLayout.addView(orangeCircle, circleParams)
+
+        // Small decorative bubble bottom-right (same as login)
+        val bubbleSize = (screenW * 0.5).toInt()
+        val bubble = android.view.View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#12FF9000")) // very subtle orange
+            }
+        }
+        val bubbleParams = android.widget.FrameLayout.LayoutParams(bubbleSize, bubbleSize).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            bottomMargin = -(bubbleSize / 3)
+            rightMargin = -(bubbleSize / 3)
+        }
+        rootLayout.addView(bubble, bubbleParams)
+
+        // ── KEPLER logo area (top 30% of screen, centered on orange) ──
+        val logoArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(48, 48, 48, 48)
-            
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F5F5F5"))
-                cornerRadius = 24f
-            }
         }
-        
-        val progressBar = ProgressBar(this).apply {
-            isIndeterminate = true
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 32
-            }
-        }
-        layout.addView(progressBar)
-        
-        val titleView = TextView(this).apply {
-            text = "USSD en cours"
-            textSize = 20f
-            setTextColor(Color.parseColor("#1976D2"))
+        val logoAreaParams = android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            (screenH * 0.30).toInt()
+        ).apply { gravity = Gravity.TOP }
+
+        // "K" letter as logo placeholder (bold white, large)
+        val logoText = TextView(this).apply {
+            text = "K"
+            textSize = 56f
+            typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 16
+            ).apply { bottomMargin = 12 }
+        }
+        logoArea.addView(logoText)
+
+        // "KEPLER" label in white with wide letter spacing
+        val brandLabel = TextView(this).apply {
+            text = "KEPLER"
+            textSize = 13f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+            letterSpacing = 0.4f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        logoArea.addView(brandLabel)
+        rootLayout.addView(logoArea, logoAreaParams)
+
+        // ── WHITE CARD: rounded top corners, bottom half of screen ────
+        val cardTopRadius = (36 * dm.density).toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(
+                (28 * dm.density).toInt(),
+                (40 * dm.density).toInt(),
+                (28 * dm.density).toInt(),
+                (28 * dm.density).toInt()
+            )
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadii = floatArrayOf(
+                    cardTopRadius.toFloat(), cardTopRadius.toFloat(),  // top-left
+                    cardTopRadius.toFloat(), cardTopRadius.toFloat(),  // top-right
+                    0f, 0f,                                            // bottom-right
+                    0f, 0f                                             // bottom-left
+                )
             }
         }
-        layout.addView(titleView)
-        
+        val cardParams = android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        ).apply { topMargin = (screenH * 0.27).toInt() }
+        rootLayout.addView(card, cardParams)
+
+        // ── Orange spinner inside white card ───────────────────────────
+        val spinnerSize = (56 * dm.density).toInt()
+        val spinner = ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#FF9000")
+            )
+            layoutParams = LinearLayout.LayoutParams(spinnerSize, spinnerSize).apply {
+                bottomMargin = (20 * dm.density).toInt()
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+        }
+        card.addView(spinner)
+
+        // ── Message text ("Envoi en cours") ───────────────────────────
         val messageView = TextView(this).apply {
             tag = "overlay_message"
             text = overlayMessage
-            textSize = 16f
-            setTextColor(Color.parseColor("#424242"))
+            textSize = 18f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+            setTextColor(Color.parseColor("#0A1628"))  // AppColors.background (dark navy)
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
-        layout.addView(messageView)
-        
-        val subtitleView = TextView(this).apply {
-            text = "Veuillez patienter..."
-            textSize = 14f
-            setTextColor(Color.parseColor("#757575"))
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 24
-            }
-        }
-        layout.addView(subtitleView)
+        card.addView(messageView)
 
-        overlayView = layout
+        overlayView = rootLayout
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -172,7 +249,7 @@ class UssdOverlayService : Service() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        params.gravity = Gravity.CENTER
+        params.gravity = Gravity.TOP or Gravity.START
 
         try {
             windowManager?.addView(overlayView, params)
