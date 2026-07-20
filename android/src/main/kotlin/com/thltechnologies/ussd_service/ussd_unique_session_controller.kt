@@ -118,11 +118,35 @@ class UssdSessionUnique(private val context: Context) {
                 }
             }
             
+            // Signal the accessibility service to close overlay + dismiss dialog after capturing response
+            UssdAccessibilityService.singleSessionMode = true
+
+            // Start overlay to mask the native USSD dialog from the user
+            if (UssdOverlayService.canDrawOverlay(context)) {
+                try {
+                    val overlayIntent = Intent(context, UssdOverlayService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(overlayIntent)
+                    } else {
+                        context.startService(overlayIntent)
+                    }
+                    UssdOverlayService.updateMessage("Envoi en cours")
+                } catch (e: Exception) {
+                    println("UssdSessionUnique: Error starting overlay: ${e.message}")
+                }
+            }
+
             context.startActivity(intent)
             result.success("USSD_INITIATED_LEGACY")
         } catch (e: SecurityException) {
+            // Stop overlay and reset state on error
+            UssdAccessibilityService.singleSessionMode = false
+            try { context.stopService(android.content.Intent(context, UssdOverlayService::class.java)) } catch (_: Exception) {}
             result.error("PERMISSION_DENIED", "CALL_PHONE permission required: ${e.message}", null)
         } catch (e: Exception) {
+            // Stop overlay and reset state on error
+            UssdAccessibilityService.singleSessionMode = false
+            try { context.stopService(android.content.Intent(context, UssdOverlayService::class.java)) } catch (_: Exception) {}
             result.error("LEGACY_USSD_ERROR", "Failed to initiate USSD: ${e.message}", null)
         }
     }

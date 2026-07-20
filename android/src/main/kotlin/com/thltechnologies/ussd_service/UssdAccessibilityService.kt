@@ -16,6 +16,9 @@ class UssdAccessibilityService : AccessibilityService() {
         private var instance: UssdAccessibilityService? = null
         private var pendingMessages: ArrayDeque<String> = ArrayDeque()
         var hideDialogs = false
+        // Set to true before launching a single-session USSD via the dialer
+        // so the service always closes the overlay and dismisses the dialog
+        var singleSessionMode = false
         private var lastUssdMessage: String? = null
         private var currentStepIndex = 0
         private var retryCount = 0
@@ -505,19 +508,36 @@ class UssdAccessibilityService : AccessibilityService() {
                 lastUssdMessage = dialogContent
                 UssdServicePlugin.onUssdResult(dialogContent)
 
-                // If there are no pending options to send, this is either a single session response 
-                // or the final step of a multi-session navigation. Dismiss the native dialog box automatically.
-                val inputNode = findInputField(root)
-                val hasInputField = inputNode != null
-                inputNode?.recycle()
-
-                if (pendingMessages.isEmpty() && !hasInputField) {
-                    handler.postDelayed({
-                        dismissActiveDialog()
-                    }, 250)
+                if (singleSessionMode) {
+                    // Single session: always stop overlay and dismiss dialog immediately
+                    singleSessionMode = false
+                    stopOverlayAndDismissDialog()
+                } else {
+                    // Multi-session: only dismiss if no more replies pending and no input field
+                    val inputNode = findInputField(root)
+                    val hasInputField = inputNode != null
+                    inputNode?.recycle()
+                    if (pendingMessages.isEmpty() && !hasInputField) {
+                        stopOverlayAndDismissDialog()
+                    }
                 }
             }
         }
+    }
+
+    private fun stopOverlayAndDismissDialog() {
+        // Stop the overlay service
+        try {
+            val overlayIntent = android.content.Intent(applicationContext, UssdOverlayService::class.java)
+            applicationContext.stopService(overlayIntent)
+            println("UssdAccessibilityService: Overlay stopped")
+        } catch (e: Exception) {
+            println("UssdAccessibilityService: Error stopping overlay: ${e.message}")
+        }
+        // Dismiss the native USSD dialog with a short delay
+        handler.postDelayed({
+            dismissActiveDialog()
+        }, 200)
     }
 
     private fun dismissActiveDialog() {
