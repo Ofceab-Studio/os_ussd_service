@@ -16,6 +16,9 @@ class UssdAccessibilityService : AccessibilityService() {
         private var instance: UssdAccessibilityService? = null
         private var pendingMessages: ArrayDeque<String> = ArrayDeque()
         var hideDialogs = false
+        // Set to true before launching a single-session USSD via the dialer
+        // so the service always closes the overlay and dismisses the dialog
+        var singleSessionMode = false
         private var lastUssdMessage: String? = null
         private var currentStepIndex = 0
         private var retryCount = 0
@@ -504,7 +507,59 @@ class UssdAccessibilityService : AccessibilityService() {
             if (isValidUssdMessage(dialogContent) && dialogContent != lastUssdMessage) {
                 lastUssdMessage = dialogContent
                 UssdServicePlugin.onUssdResult(dialogContent)
+
+                if (singleSessionMode) {
+                    // Single session: always stop overlay and dismiss dialog immediately
+                    singleSessionMode = false
+                    stopOverlayAndDismissDialog()
+                } else {
+                    // Multi-session: only dismiss if no more replies pending and no input field
+                    val inputNode = findInputField(root)
+                    val hasInputField = inputNode != null
+                    inputNode?.recycle()
+                    if (pendingMessages.isEmpty() && !hasInputField) {
+                        stopOverlayAndDismissDialog()
+                    }
+                }
             }
+        }
+    }
+
+    private fun stopOverlayAndDismissDialog() {
+        // Stop the overlay service
+        try {
+            val overlayIntent = android.content.Intent(applicationContext, UssdOverlayService::class.java)
+            applicationContext.stopService(overlayIntent)
+            println("UssdAccessibilityService: Overlay stopped")
+        } catch (e: Exception) {
+            println("UssdAccessibilityService: Error stopping overlay: ${e.message}")
+        }
+        // Dismiss the native USSD dialog with a short delay
+        handler.postDelayed({
+            dismissActiveDialog()
+        }, 200)
+    }
+
+    private fun dismissActiveDialog() {
+        try {
+            val root = this.rootInActiveWindow ?: return
+            val button1 = root.findAccessibilityNodeInfosByViewId("android:id/button1")
+            var clicked = button1?.firstOrNull()?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+            button1?.forEach { it.recycle() }
+            
+            if (!clicked) {
+                val button2 = root.findAccessibilityNodeInfosByViewId("android:id/button2")
+                clicked = button2?.firstOrNull()?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+                button2?.forEach { it.recycle() }
+            }
+            
+            if (!clicked) {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            }
+            root.recycle()
+            println("UssdAccessibilityService: Dialogue dismissed automatically")
+        } catch (e: Exception) {
+            println("UssdAccessibilityService: Error dismissing dialogue: ${e.message}")
         }
     }
     
