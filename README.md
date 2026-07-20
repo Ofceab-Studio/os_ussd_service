@@ -16,7 +16,7 @@ Add `thl_ussd_service` as a dependency in your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  thl_ussd_service: ^0.2.1
+  thl_ussd_service: ^0.2.0
 ```
 
 ### Android Manifest & Permissions
